@@ -1,0 +1,85 @@
+name: Build Windows binaries
+
+on:
+  push:
+    branches: [ master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    strategy:
+      matrix:
+        include:
+          - msystem: MINGW64
+            arch: x86_64
+            artifact-suffix: x64
+          - msystem: MINGW32
+            arch: i686
+            artifact-suffix: x86
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: ${{ matrix.msystem }}
+        update: true
+        install: >-
+          mingw-w64-${{ matrix.arch }}-gcc
+          mingw-w64-${{ matrix.arch }}-make
+          mingw-w64-${{ matrix.arch }}-libusb
+          mingw-w64-${{ matrix.arch }}-zlib
+          mingw-w64-${{ matrix.arch }}-dtc
+
+    - name: Build sunxi-fel
+      run: |
+        export PKG_CONFIG_PATH=/mingw${{ matrix.arch == 'i686' && '32' || '64' }}/lib/pkgconfig
+        export OS=Windows_NT
+        make clean
+        make sunxi-fel
+        mv sunxi-fel.exe sunxi-fel-${{ matrix.artifact-suffix }}.exe
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: sunxi-fel-windows-${{ matrix.artifact-suffix }}
+        path: |
+          sunxi-fel-*.exe
+
+  release:
+    needs: build-windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: sunxi-fel-windows-*
+        path: artifacts
+        merge-multiple: true
+
+    - name: Create ZIP packages
+      run: |
+        mkdir -p release
+        cd artifacts
+        zip -r ../release/sunxi-fel-windows.zip sunxi-fel-*.exe
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: release/sunxi-fel-windows.zip
