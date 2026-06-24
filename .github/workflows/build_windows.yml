@@ -80,8 +80,7 @@ jobs:
         make -j$(nproc) NO_PYTHON=1 NO_YAML=1 libfdt
         sudo mkdir -p $PREFIX/include
         sudo mkdir -p $PREFIX/lib
-        sudo cp libfdt/libfdt.h $PREFIX/include/
-        sudo cp libfdt/libfdt_env.h $PREFIX/include/
+        sudo cp libfdt/*.h $PREFIX/include/
         sudo cp libfdt/libfdt.a $PREFIX/lib/
         cd ..
 
