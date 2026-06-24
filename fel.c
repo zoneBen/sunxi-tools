@@ -882,8 +882,7 @@ uint32_t aw_fel_write_and_execute_spl(feldev_handle *dev, uint8_t *buf, size_t l
 	free(thunk_buf);
 
 	/* TODO: Try to find and fix the bug, which needs this workaround */
-	struct timespec req = { .tv_nsec = 250000000 }; /* 250ms */
-	nanosleep(&req, NULL);
+	sunxi_nanosleep(250000000); /* 250ms */
 
 	/* Read back the result and check if everything was fine */
 	aw_fel_read(dev, soc_info->spl_addr + 4, header_signature, 8);

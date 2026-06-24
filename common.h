@@ -45,4 +45,20 @@
 #define pr_fatal(...) \
 	do { pr_error(__VA_ARGS__); exit(EXIT_FAILURE); } while (0);
 
+/* Windows compatibility */
+#ifdef _WIN32
+#include <windows.h>
+static inline void sunxi_nanosleep(long nanoseconds)
+{
+	Sleep((nanoseconds + 999999) / 1000000);
+}
+#else
+#include <time.h>
+static inline void sunxi_nanosleep(long nanoseconds)
+{
+	struct timespec req = { .tv_nsec = nanoseconds };
+	nanosleep(&req, NULL);
+}
+#endif
+
 #endif /* _SUNXI_TOOLS_COMMON_H */
