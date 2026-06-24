@@ -10,43 +10,103 @@ on:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
+    runs-on: ubuntu-latest
 
     strategy:
       matrix:
         include:
-          - msystem: MINGW64
-            arch: x86_64
+          - arch: x86_64
             artifact-suffix: x64
-          - msystem: MINGW32
-            arch: i686
+          - arch: i686
             artifact-suffix: x86
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Setup MSYS2
-      uses: msys2/setup-msys2@v2
-      with:
-        msystem: ${{ matrix.msystem }}
-        update: true
-        install: >-
-          mingw-w64-${{ matrix.arch }}-gcc
-          mingw-w64-${{ matrix.arch }}-make
-          mingw-w64-${{ matrix.arch }}-libusb
-          mingw-w64-${{ matrix.arch }}-zlib
-          mingw-w64-${{ matrix.arch }}-dtc
-
-    - name: Build sunxi-fel
+    - name: Install MinGW-w64 cross-compiler
       run: |
-        export PKG_CONFIG_PATH=/mingw${{ matrix.arch == 'i686' && '32' || '64' }}/lib/pkgconfig
+        sudo apt-get update
+        sudo apt-get install -y mingw-w64
+
+    - name: Build libusb from source
+      run: |
+        LIBUSB_VERSION=1.0.26
+        wget https://github.com/libusb/libusb/releases/download/v${LIBUSB_VERSION}/libusb-${LIBUSB_VERSION}.tar.bz2 -O libusb.tar.bz2
+        tar -xjf libusb.tar.bz2
+        cd libusb-${LIBUSB_VERSION}
+        if [ "${{ matrix.arch }}" = "x86_64" ]; then
+          HOST=x86_64-w64-mingw32
+        else
+          HOST=i686-w64-mingw32
+        fi
+        ./configure --host=${HOST} --prefix=/usr/${HOST} --disable-shared --enable-static
+        make -j$(nproc)
+        sudo make install
+        cd ..
+
+    - name: Build zlib from source
+      run: |
+        ZLIB_VERSION=1.2.13
+        wget https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -O zlib.tar.gz
+        tar -xzf zlib.tar.gz
+        cd zlib-${ZLIB_VERSION}
+        if [ "${{ matrix.arch }}" = "x86_64" ]; then
+          export CC=x86_64-w64-mingw32-gcc
+          HOST=x86_64-w64-mingw32
+        else
+          export CC=i686-w64-mingw32-gcc
+          HOST=i686-w64-mingw32
+        fi
+        ./configure --prefix=/usr/${HOST} --static
+        make -j$(nproc)
+        sudo make install
+        cd ..
+
+    - name: Build libfdt from source
+      run: |
+        DTC_VERSION=1.6.1
+        wget https://git.kernel.org/pub/scm/utils/dtc/dtc.git/snapshot/dtc-${DTC_VERSION}.tar.gz -O dtc.tar.gz
+        tar -xzf dtc.tar.gz
+        cd dtc-${DTC_VERSION}
+        if [ "${{ matrix.arch }}" = "x86_64" ]; then
+          export CC=x86_64-w64-mingw32-gcc
+          export AR=x86_64-w64-mingw32-ar
+          export PREFIX=/usr/x86_64-w64-mingw32
+        else
+          export CC=i686-w64-mingw32-gcc
+          export AR=i686-w64-mingw32-ar
+          export PREFIX=/usr/i686-w64-mingw32
+        fi
+        make -j$(nproc) NO_PYTHON=1 NO_YAML=1 libfdt
+        sudo mkdir -p $PREFIX/include
+        sudo mkdir -p $PREFIX/lib
+        sudo cp libfdt/libfdt.h $PREFIX/include/
+        sudo cp libfdt/libfdt_env.h $PREFIX/include/
+        sudo cp libfdt/libfdt.a $PREFIX/lib/
+        cd ..
+
+    - name: Build sunxi-fel for Windows
+      run: |
+        if [ "${{ matrix.arch }}" = "x86_64" ]; then
+          export CC=x86_64-w64-mingw32-gcc
+          export PREFIX=/usr/x86_64-w64-mingw32
+          EXE=sunxi-fel-${{ matrix.artifact-suffix }}.exe
+        else
+          export CC=i686-w64-mingw32-gcc
+          export PREFIX=/usr/i686-w64-mingw32
+          EXE=sunxi-fel-${{ matrix.artifact-suffix }}.exe
+        fi
+        export LIBUSB_CFLAGS="-I$PREFIX/include/libusb-1.0"
+        export LIBUSB_LIBS="-L$PREFIX/lib -lusb-1.0"
+        export ZLIB_CFLAGS="-I$PREFIX/include"
+        export ZLIB_LIBS="-L$PREFIX/lib -lz"
+        export LIBFDT_CFLAGS="-I$PREFIX/include"
+        export LIBFDT_LIBS="-L$PREFIX/lib -lfdt"
+        export LIBS="-lws2_32"
         export OS=Windows_NT
         make clean
         make sunxi-fel
-        mv sunxi-fel.exe sunxi-fel-${{ matrix.artifact-suffix }}.exe
+        mv sunxi-fel $EXE
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
