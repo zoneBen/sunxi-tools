@@ -30,9 +30,9 @@ jobs:
 
     - name: Build libusb from source
       run: |
-        LIBUSB_VERSION=1.0.26
-        wget https://github.com/libusb/libusb/releases/download/v${LIBUSB_VERSION}/libusb-${LIBUSB_VERSION}.tar.bz2 -O libusb.tar.bz2
-        tar -xjf libusb.tar.bz2
+        LIBUSB_VERSION=1.0.27
+        wget https://github.com/libusb/libusb/archive/refs/tags/v${LIBUSB_VERSION}.tar.gz -O libusb.tar.gz
+        tar -xzf libusb.tar.gz
         cd libusb-${LIBUSB_VERSION}
         if [ "${{ matrix.arch }}" = "x86_64" ]; then
           HOST=x86_64-w64-mingw32
@@ -46,8 +46,8 @@ jobs:
 
     - name: Build zlib from source
       run: |
-        ZLIB_VERSION=1.2.13
-        wget https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz -O zlib.tar.gz
+        ZLIB_VERSION=1.3.2
+        wget https://github.com/madler/zlib/archive/refs/tags/v${ZLIB_VERSION}.tar.gz -O zlib.tar.gz
         tar -xzf zlib.tar.gz
         cd zlib-${ZLIB_VERSION}
         if [ "${{ matrix.arch }}" = "x86_64" ]; then
@@ -64,8 +64,8 @@ jobs:
 
     - name: Build libfdt from source
       run: |
-        DTC_VERSION=1.6.1
-        wget https://git.kernel.org/pub/scm/utils/dtc/dtc.git/snapshot/dtc-${DTC_VERSION}.tar.gz -O dtc.tar.gz
+        DTC_VERSION=1.7.0
+        wget https://github.com/dgibson/dtc/archive/refs/tags/v${DTC_VERSION}.tar.gz -O dtc.tar.gz
         tar -xzf dtc.tar.gz
         cd dtc-${DTC_VERSION}
         if [ "${{ matrix.arch }}" = "x86_64" ]; then
