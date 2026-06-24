@@ -105,7 +105,7 @@ jobs:
         export OS=Windows_NT
         make clean
         make sunxi-fel
-        mv sunxi-fel $EXE
+        mv sunxi-fel.exe $EXE
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
