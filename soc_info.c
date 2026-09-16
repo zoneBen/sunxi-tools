@@ -235,15 +235,21 @@ sram_swap_buffers no_sram_swap_buffers[] = {
  *
  * Both settings are confirmed on hardware: with scratch_addr = 0x68000 and
  * icache_fix set, "sunxi-fel -l" prints the SID and "readl"/"writel"
- * round-trip correctly on a T153. With scratch_addr = 0x48000 and no
- * icache_fix, the same commands failed silently - the thunk wrote its code
- * but the CPU executed stale cached instructions instead, leaving the result
- * buffer untouched (the readback was the same constant word every time).
+ * round-trip correctly on a T153. The I-cache is the part that matters: the
+ * old combination (scratch_addr = 0x48000, icache_fix unset) failed silently,
+ * and executing a raw stub at 0x48000 later hung the board, while 0x68000
+ * works. 0x48000 was never retried with the I-cache disabled, so it is not
+ * proven unusable, but 0x68000 is kept because it is both the address the BROM
+ * reports and the one xfel links its T153 code at.
  *
- * Beware when testing this on hardware: executing code at a scratch address
- * without that flush hangs the FEL handler until the board is power cycled,
- * so do not probe candidate addresses with "write" plus "exe" of a raw stub.
- * Read-only "hex" of a candidate address is safe.
+ * Note that only aw_fel_write() applies icache_fix. The user-facing "write",
+ * "fill" and "multiwrite" commands go through aw_fel_write_buffer(), which
+ * does not, and "exe" goes through aw_fel_execute(), which does not either.
+ * Writing data is harmless, but "exe" on this SoC can execute stale cached
+ * instructions, and as every sunxi-fel invocation is a fresh process,
+ * icache_fix never protects it - doing so hangs the FEL handler until the
+ * board is power cycled. The "spl" and "uboot" paths are safe, because they
+ * load the SPL through aw_fel_write(). Read-only "hex" is always safe.
  *
  * The vendor SDK documents 160 KiB of on-chip SRAM, which is what sram_size
  * is set to: 0x40000 + 0x28000 = 0x68000. The thunk below sits at the top of
