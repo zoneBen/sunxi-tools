@@ -197,6 +197,34 @@ sram_swap_buffers no_sram_swap_buffers[] = {
 	{ .size = 0 }  /* End of the table */
 };
 
+/*
+ * Allwinner T153 (sun8iw22p1), FEL/BROM soc_id 0x1922.
+ *
+ * The SID, watchdog and version register addresses are taken from the vendor
+ * SDK device tree (sun8iw22p1.dtsi):
+ *   sid@0x03006000, chipid at +0x200        -> sid_base / sid_offset
+ *   wdt@0x02050000, "allwinner,wdt-v103"    -> wd_a523_compat
+ *   sram_ctrl@0x03000000, SOC_VER at +0x24  -> ver_reg (only needed together
+ *                                              with rvbar_reg_alt, so unset)
+ *
+ * The SRAM layout below is NOT verified against real hardware yet. The
+ * vendor boot0 package loads boot0 at 0x40000, which is where the BROM loads
+ * the next stage in FEL mode, so spl_addr is set to 0x40000. scratch_addr is
+ * spl_addr + 0x1000 and the thunk is placed at the end of the assumed SRAM
+ * window, following the convention of the other recently added SoCs
+ * (H616/V853/A523). These values are what to fix first if 'sid', 'exec' or
+ * 'spl' misbehave; plain 'read'/'write' use the native FEL protocol and do
+ * not depend on them.
+ *
+ * The swap table is deliberately empty: the BROM buffers that have to be
+ * preserved while the SPL runs are unknown for this SoC, and moving the wrong
+ * region around corrupts the BROM. Once they are identified (compare with how
+ * A523 describes 0x45000 -> 0x40200), add them here.
+ */
+sram_swap_buffers t153_sram_swap_buffers[] = {
+	{ .size = 0 }  /* End of the table */
+};
+
 const watchdog_info wd_a10_compat = {
 	.reg_mode = 0x01C20C94,
 	.reg_mode_value = 3,
@@ -642,6 +670,18 @@ soc_info_t soc_info_table[] = {
 		.rvbar_reg    = 0x08100040,
 		.needs_smc_workaround_if_zero_word_at_addr = 0x100004,
 		.watchdog     = &wd_h6_compat,
+	},{
+		.soc_id       = 0x1922, /* Allwinner T153 (sun8iw22p1) */
+		.name         = "T153",
+		.spl_addr     = 0x40000,
+		.scratch_addr = 0x41000,
+		.thunk_addr   = 0x57e00, .thunk_size = 0x200,
+		.swap_buffers = t153_sram_swap_buffers,
+		.sram_size    = 96 * 1024,
+		.sid_base     = 0x03006000,
+		.sid_offset   = 0x200,
+		.sid_sections = generic_2k_sid_maps,
+		.watchdog     = &wd_a523_compat,
 	},{
 		.swap_buffers = NULL /* End of the table */
 	}
