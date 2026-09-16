@@ -209,17 +209,25 @@ sram_swap_buffers no_sram_swap_buffers[] = {
  *     (sun8iw22p1.dtsi, sid@0x03006000)
  *   - chip_reset() writes 0x16aa0001 to 0x02050008, so the watchdog entry
  *     is identical to the A523 one (wdt@0x02050000, "allwinner,wdt-v103")
- *   - xfel stages and runs its T153 payloads at 0x00048000 (see
- *     payloads/t153/spi/link.ld), which makes that address a good choice
- *     for scratch_addr: it is known to be both writable and executable
  *   - xfel writes its SPI command buffer to 0x00049000 and uses 0x0004a000
  *     plus 64 KiB as a free buffer, so the SRAM window of this SoC extends
  *     at least up to 0x0005a000
  *
- * scratch_addr could also be taken from the scratchpad address that the BROM
- * reports in its FEL version response (that is what xfel does, and it can be
- * seen with "sunxi-fel ver"). It is not used here because 0x48000 above has
- * independent evidence of being executable on this SoC.
+ * scratch_addr comes straight from the hardware: the BROM of this SoC reports
+ * scratchpad=0x00068000 in its FEL version response. That is the value xfel
+ * stages and executes its payloads at on every SoC it supports
+ * (fel_write(ctx->version.scratchpad, ...) followed by
+ * fel_exec(ctx->version.scratchpad)), and it can be seen with
+ * "sunxi-fel ver". Note that 0x68000 is exactly spl_addr + sram_size, i.e.
+ * the BROM hands out the first byte above the 160 KiB SRAM bank that the SPL
+ * is loaded into.
+ *
+ * icache_fix is set because the thunk code is written to the fixed address
+ * above and then executed: as on the A523, whose BROM is of the same
+ * generation (same watchdog register), the stale I-cache contents of that
+ * address have to be invalidated first (see aw_fel_write() in fel_lib.c).
+ * xfel does not need this because it only ever executes at the scratchpad
+ * address the BROM has just handed out.
  *
  * The vendor SDK documents 160 KiB of on-chip SRAM, which is what sram_size
  * is set to: 0x40000 + 0x28000 = 0x68000. The thunk below sits at the top of
@@ -229,9 +237,7 @@ sram_swap_buffers no_sram_swap_buffers[] = {
  *
  * Still not verified on hardware: spl_addr (taken from the boot0 load
  * address in the vendor boot package) and thunk_addr (top of the
- * xfel-verified window). These two only affect 'spl' and 'uboot';
- * scratch_addr affects every thunk based command including the SID read that
- * "sunxi-fel -l" performs.
+ * xfel-verified window). These two only affect 'spl' and 'uboot'.
  *
  * Deliberately left unset:
  *   - needs_l2en: the vendor SDK only confirms that the Cortex-A7 core has
@@ -704,13 +710,14 @@ soc_info_t soc_info_table[] = {
 		.soc_id       = 0x1922, /* Allwinner T153 (sun8iw22p1) */
 		.name         = "T153",
 		.spl_addr     = 0x40000,
-		.scratch_addr = 0x48000,	/* xfel runs its T153 payloads here */
+		.scratch_addr = 0x68000,	/* scratchpad reported by the BROM */
 		.thunk_addr   = 0x59e00, .thunk_size = 0x200,
 		.swap_buffers = t153_sram_swap_buffers,
 		.sram_size    = 0x28000,	/* 160 KiB, per the vendor SDK */
 		.sid_base     = 0x03006000,
 		.sid_offset   = 0x200,
 		.sid_sections = generic_2k_sid_maps,
+		.icache_fix   = true,
 		.watchdog     = &wd_a523_compat,
 	},{
 		.swap_buffers = NULL /* End of the table */
