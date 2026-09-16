@@ -198,23 +198,32 @@ sram_swap_buffers no_sram_swap_buffers[] = {
 };
 
 /*
- * Allwinner T153 (sun8iw22p1), FEL/BROM soc_id 0x1922.
+ * Allwinner T153 (sun8iw22p1), FEL/BROM soc_id 0x00192200. It is a
+ * quad-core Cortex-A7 (32-bit) with an additional E907 RISC-V core.
  *
- * The SID, watchdog and version register addresses are taken from the vendor
- * SDK device tree (sun8iw22p1.dtsi):
- *   sid@0x03006000, chipid at +0x200        -> sid_base / sid_offset
- *   wdt@0x02050000, "allwinner,wdt-v103"    -> wd_a523_compat
- *   sram_ctrl@0x03000000, SOC_VER at +0x24  -> ver_reg (only needed together
- *                                              with rvbar_reg_alt, so unset)
+ * Verified against the xfel sources (chips/t153.c), which already support
+ * this SoC:
+ *   - chip_detect() matches 0x00192200
+ *   - chip_sid() reads 0x03006200, i.e. sid_base 0x03006000 + 0x200, which
+ *     is also the chipid offset in the vendor SDK device tree
+ *     (sun8iw22p1.dtsi, sid@0x03006000)
+ *   - chip_reset() writes 0x16aa0001 to 0x02050008, so the watchdog entry
+ *     is identical to the A523 one (wdt@0x02050000, "allwinner,wdt-v103")
+ *   - xfel stages and runs its T153 payloads at 0x00048000 (see
+ *     payloads/t153/spi/link.ld), and uses 0x0004a000 with a length of
+ *     64 KiB as a free buffer (chip_spi_init), so the SRAM window of this
+ *     SoC extends at least up to 0x0005a000
+ *   - xfel itself runs its thunk-like payloads from the scratchpad address
+ *     reported by the BROM in the FEL version response; the exact value for
+ *     a T153 can be seen with "sunxi-fel -v ver" and may be a better choice
+ *     for scratch_addr than the address below
  *
- * The SRAM layout below is NOT verified against real hardware yet. The
- * vendor boot0 package loads boot0 at 0x40000, which is where the BROM loads
- * the next stage in FEL mode, so spl_addr is set to 0x40000. scratch_addr is
- * spl_addr + 0x1000 and the thunk is placed at the end of the assumed SRAM
- * window, following the convention of the other recently added SoCs
- * (H616/V853/A523). These values are what to fix first if 'sid', 'exec' or
- * 'spl' misbehave; plain 'read'/'write' use the native FEL protocol and do
- * not depend on them.
+ * Still not verified on hardware: spl_addr (taken from the boot0 load
+ * address in the vendor boot package), sram_size (derived from the end of
+ * xfel's 64 KiB buffer above) and thunk_addr (spl_addr + sram_size - 0x200,
+ * following the H616/V853 convention). These three only affect 'spl' and
+ * 'uboot'; scratch_addr affects every thunk based command including the SID
+ * read that "sunxi-fel -l" performs.
  *
  * The swap table is deliberately empty: the BROM buffers that have to be
  * preserved while the SPL runs are unknown for this SoC, and moving the wrong
@@ -674,10 +683,10 @@ soc_info_t soc_info_table[] = {
 		.soc_id       = 0x1922, /* Allwinner T153 (sun8iw22p1) */
 		.name         = "T153",
 		.spl_addr     = 0x40000,
-		.scratch_addr = 0x41000,
-		.thunk_addr   = 0x57e00, .thunk_size = 0x200,
+		.scratch_addr = 0x48000,	/* xfel runs its T153 payloads here */
+		.thunk_addr   = 0x59e00, .thunk_size = 0x200,
 		.swap_buffers = t153_sram_swap_buffers,
-		.sram_size    = 96 * 1024,
+		.sram_size    = 0x1a000,
 		.sid_base     = 0x03006000,
 		.sid_offset   = 0x200,
 		.sid_sections = generic_2k_sid_maps,
