@@ -214,20 +214,29 @@ sram_swap_buffers no_sram_swap_buffers[] = {
  *     at least up to 0x0005a000
  *
  * scratch_addr comes straight from the hardware: the BROM of this SoC reports
- * scratchpad=0x00068000 in its FEL version response. That is the value xfel
- * stages and executes its payloads at on every SoC it supports
- * (fel_write(ctx->version.scratchpad, ...) followed by
- * fel_exec(ctx->version.scratchpad)), and it can be seen with
- * "sunxi-fel ver". Note that 0x68000 is exactly spl_addr + sram_size, i.e.
- * the BROM hands out the first byte above the 160 KiB SRAM bank that the SPL
- * is loaded into.
+ * scratchpad=0x00068000 in its FEL version response, which can be seen with
+ * "sunxi-fel ver". xfel carries the same value hard-coded in its T153 payload
+ * linker scripts (payloads/t153/read32/link.ld and write32/link.ld say
+ * "ram : org = 0x00068000, len = 0x00000200") and writes those payloads to
+ * ctx->version.scratchpad before calling fel_exec() there. Note that 0x68000
+ * is exactly spl_addr + sram_size, i.e. the first byte above the 160 KiB SRAM
+ * bank that the SPL is loaded into.
  *
- * icache_fix is set because the thunk code is written to the fixed address
- * above and then executed: as on the A523, whose BROM is of the same
- * generation (same watchdog register), the stale I-cache contents of that
- * address have to be invalidated first (see aw_fel_write() in fel_lib.c).
- * xfel does not need this because it only ever executes at the scratchpad
- * address the BROM has just handed out.
+ * icache_fix is set because on this BROM generation code that was just written
+ * is not necessarily fetched from memory when it is executed. Every xfel T153
+ * payload starts with an explicit I-cache and branch predictor flush
+ * (mov r0, #0; mcr p15, 0, r0, c8, c7, 0; mcr p15, 0, r0, c7, c5, 0;
+ * mcr p15, 0, r0, c7, c5, 6; mcr p15, 0, r0, c7, c10, 4;
+ * mcr p15, 0, r0, c7, c5, 4) in front of its real code, and that same preamble
+ * is present in exactly the payloads of the SoCs for which sunxi-tools sets
+ * this flag (A523, R528/T113, V853). With the flag set, aw_fel_write() runs
+ * aw_disable_icache() once, which clears SCTLR.I and invalidates the I-cache
+ * before the first thunk is executed.
+ *
+ * Beware when testing this on hardware: executing code at a scratch address
+ * without that flush can hang the FEL handler until the board is power cycled,
+ * so do not probe candidate addresses with "write" plus "exe" of a raw stub.
+ * Read-only "hex" of a candidate address is safe.
  *
  * The vendor SDK documents 160 KiB of on-chip SRAM, which is what sram_size
  * is set to: 0x40000 + 0x28000 = 0x68000. The thunk below sits at the top of
