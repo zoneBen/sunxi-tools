@@ -210,20 +210,41 @@ sram_swap_buffers no_sram_swap_buffers[] = {
  *   - chip_reset() writes 0x16aa0001 to 0x02050008, so the watchdog entry
  *     is identical to the A523 one (wdt@0x02050000, "allwinner,wdt-v103")
  *   - xfel stages and runs its T153 payloads at 0x00048000 (see
- *     payloads/t153/spi/link.ld), and uses 0x0004a000 with a length of
- *     64 KiB as a free buffer (chip_spi_init), so the SRAM window of this
- *     SoC extends at least up to 0x0005a000
- *   - xfel itself runs its thunk-like payloads from the scratchpad address
- *     reported by the BROM in the FEL version response; the exact value for
- *     a T153 can be seen with "sunxi-fel -v ver" and may be a better choice
- *     for scratch_addr than the address below
+ *     payloads/t153/spi/link.ld), which makes that address a good choice
+ *     for scratch_addr: it is known to be both writable and executable
+ *   - xfel writes its SPI command buffer to 0x00049000 and uses 0x0004a000
+ *     plus 64 KiB as a free buffer, so the SRAM window of this SoC extends
+ *     at least up to 0x0005a000
+ *
+ * scratch_addr could also be taken from the scratchpad address that the BROM
+ * reports in its FEL version response (that is what xfel does, and it can be
+ * seen with "sunxi-fel ver"). It is not used here because 0x48000 above has
+ * independent evidence of being executable on this SoC.
+ *
+ * The vendor SDK documents 160 KiB of on-chip SRAM, which is what sram_size
+ * is set to: 0x40000 + 0x28000 = 0x68000. The thunk below sits at the top of
+ * the xfel-verified window instead, which caps the loadable SPL at 0x19e00
+ * bytes (see the spl_len_limit logic in fel.c), so this larger sram_size
+ * cannot make us write past the region we actually have evidence for.
  *
  * Still not verified on hardware: spl_addr (taken from the boot0 load
- * address in the vendor boot package), sram_size (derived from the end of
- * xfel's 64 KiB buffer above) and thunk_addr (spl_addr + sram_size - 0x200,
- * following the H616/V853 convention). These three only affect 'spl' and
- * 'uboot'; scratch_addr affects every thunk based command including the SID
- * read that "sunxi-fel -l" performs.
+ * address in the vendor boot package) and thunk_addr (top of the
+ * xfel-verified window). These two only affect 'spl' and 'uboot';
+ * scratch_addr affects every thunk based command including the SID read that
+ * "sunxi-fel -l" performs.
+ *
+ * Deliberately left unset:
+ *   - needs_l2en: the vendor SDK only confirms that the Cortex-A7 core has
+ *     the ACTLR.L2EN bit, which every Cortex-A7 has. It says nothing about
+ *     the BROM leaving L2 disabled. Like H3/V3s/A33/T113, we leave it alone;
+ *     only the A10/A13/A20 era BROMs need this.
+ *   - mmu_tt_addr: the SDK value was derived by inference ("last 16 KiB of
+ *     SRAM C"), not read from the BROM. Leaving it at zero keeps whatever
+ *     translation table the BROM installed, which is the safe default (the
+ *     H616 entry does the same).
+ *   - ver_reg: only read by aw_rmr_request(), and only after rvbar_reg is
+ *     set. That is an ARM RMR request, which does not apply here, so the
+ *     field would never be used.
  *
  * The swap table is deliberately empty: the BROM buffers that have to be
  * preserved while the SPL runs are unknown for this SoC, and moving the wrong
@@ -686,7 +707,7 @@ soc_info_t soc_info_table[] = {
 		.scratch_addr = 0x48000,	/* xfel runs its T153 payloads here */
 		.thunk_addr   = 0x59e00, .thunk_size = 0x200,
 		.swap_buffers = t153_sram_swap_buffers,
-		.sram_size    = 0x1a000,
+		.sram_size    = 0x28000,	/* 160 KiB, per the vendor SDK */
 		.sid_base     = 0x03006000,
 		.sid_offset   = 0x200,
 		.sid_sections = generic_2k_sid_maps,
