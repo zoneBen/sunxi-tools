@@ -233,8 +233,15 @@ sram_swap_buffers no_sram_swap_buffers[] = {
  * aw_disable_icache() once, which clears SCTLR.I and invalidates the I-cache
  * before the first thunk is executed.
  *
+ * Both settings are confirmed on hardware: with scratch_addr = 0x68000 and
+ * icache_fix set, "sunxi-fel -l" prints the SID and "readl"/"writel"
+ * round-trip correctly on a T153. With scratch_addr = 0x48000 and no
+ * icache_fix, the same commands failed silently - the thunk wrote its code
+ * but the CPU executed stale cached instructions instead, leaving the result
+ * buffer untouched (the readback was the same constant word every time).
+ *
  * Beware when testing this on hardware: executing code at a scratch address
- * without that flush can hang the FEL handler until the board is power cycled,
+ * without that flush hangs the FEL handler until the board is power cycled,
  * so do not probe candidate addresses with "write" plus "exe" of a raw stub.
  * Read-only "hex" of a candidate address is safe.
  *
